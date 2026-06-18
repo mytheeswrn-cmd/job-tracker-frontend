@@ -86,7 +86,7 @@ function Dashboard() {
           <motion.button
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
-            onClick={() => navigate('/add-job')}
+            onClick={() => navigate('/job/new')}
             className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-medium"
           >
             <Plus className="w-4 h-4" /> Add Job
