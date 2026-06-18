@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Briefcase, CheckCircle, Calendar, XCircle, LogOut, Plus, Sparkles, X, Copy, Check } from 'lucide-react';
+import { Briefcase, CheckCircle, Calendar, XCircle, LogOut, Plus, Sparkles, X, Copy, Check, User, Mail, Lock, ArrowRight, Link } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 
