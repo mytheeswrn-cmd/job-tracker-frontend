@@ -17,7 +17,12 @@ function Dashboard() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    const fetchData = async () => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      navigate('/login');
+      return;
+    }
+   const fetchData = async () => {
       try {
         const [statsRes, jobsRes] = await Promise.all([
           api.get('/jobs/stats'),
@@ -26,17 +31,19 @@ function Dashboard() {
         setStats(statsRes.data);
         setJobs(jobsRes.data);
       } catch (err) {
-        console.error(err);
-        if (err.response?.status === 403) {
+        console.error('Dashboard fetch error:', err);
+        if (err.response?.status === 401) {
+          localStorage.removeItem('token');
           navigate('/login');
         }
+        // 403 or network errors → stay on dashboard, don't kick out
       } finally {
         setLoading(false);
       }
     };
+
     fetchData();
   }, [navigate]);
-
   const handleLogout = () => {
     localStorage.removeItem('token');
     navigate('/login');
