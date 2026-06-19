@@ -11,6 +11,8 @@ function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/dashboard" element={<Dashboard />} />
+        {/* BUG FIX: Was "/jobs/new" in route but Dashboard navigated to "/job/new"
+            (missing 's'). Unified to "/jobs/new" here and fixed in Dashboard too. */}
         <Route path="/jobs/new" element={<JobForm />} />
         <Route path="*" element={<Navigate to="/login" />} />
       </Routes>

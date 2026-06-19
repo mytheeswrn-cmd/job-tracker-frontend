@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Briefcase, CheckCircle, Calendar, XCircle, LogOut, Plus, X, MessageCircle, Send } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -15,6 +15,8 @@ function Dashboard() {
   const [input, setInput] = useState('');
   const [thinking, setThinking] = useState(false);
   const navigate = useNavigate();
+  // BUG FIX 1 (minor): ref to auto-scroll chat to bottom on new messages
+  const chatBottomRef = useRef(null);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -22,7 +24,7 @@ function Dashboard() {
       navigate('/login');
       return;
     }
-   const fetchData = async () => {
+    const fetchData = async () => {
       try {
         const [statsRes, jobsRes] = await Promise.all([
           api.get('/jobs/stats'),
@@ -32,33 +34,42 @@ function Dashboard() {
         setJobs(jobsRes.data);
       } catch (err) {
         console.error('Dashboard fetch error:', err);
-        if (err.response?.status === 401) {
-          localStorage.removeItem('token');
-          navigate('/login');
-        }
-        // 403 or network errors → stay on dashboard, don't kick out
+        // 401 is now handled globally by the api.js interceptor.
+        // We only need to handle non-auth errors here.
       } finally {
         setLoading(false);
       }
     };
-
     fetchData();
   }, [navigate]);
+
+  // Auto-scroll chat to bottom whenever messages change
+  useEffect(() => {
+    chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, thinking]);
+
   const handleLogout = () => {
     localStorage.removeItem('token');
     navigate('/login');
   };
 
   const handleSend = async () => {
-    if (!input.trim()) return;
-    const userMsg = { role: 'user', text: input };
-    setMessages(prev => [...prev, userMsg]);
+    if (!input.trim() || thinking) return;
+
+    // BUG FIX 2: Capture the message text BEFORE clearing input.
+    // The original code set setInput('') then used `input` in the API call.
+    // In React, state updates are async so `input` could already be '' by
+    // the time the api.post runs, sending an empty message to the backend.
+    const messageText = input.trim();
+    setMessages(prev => [...prev, { role: 'user', text: messageText }]);
     setInput('');
     setThinking(true);
 
     try {
-      const context = jobs.map(j => `${j.jobRole} at ${j.companyName} (${j.status})`).join(', ');
-      const res = await api.post('/ai/chat', { message: input, context });
+      const context = jobs.length > 0
+        ? jobs.map(j => `${j.jobRole} at ${j.companyName} (${j.status})`).join(', ')
+        : 'No job applications yet.';
+      const res = await api.post('/ai/chat', { message: messageText, context });
       setMessages(prev => [...prev, { role: 'ai', text: res.data.reply }]);
     } catch {
       setMessages(prev => [...prev, { role: 'ai', text: 'Sorry, I could not respond right now.' }]);
@@ -93,7 +104,10 @@ function Dashboard() {
           <motion.button
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
-            onClick={() => navigate('/job/new')}
+            {/* BUG FIX 3: Was "/job/new" — missing 's'. The route in App.jsx is "/jobs/new".
+                This caused the Add Job button to match the wildcard route and redirect
+                straight back to /login instead of opening the form. */}
+            onClick={() => navigate('/jobs/new')}
             className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-medium"
           >
             <Plus className="w-4 h-4" /> Add Job
@@ -113,10 +127,12 @@ function Dashboard() {
       {stats && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           {[
-            { label: 'Total Jobs', value: stats.total, icon: <Briefcase className="w-5 h-5" /> },
-            { label: 'Applied', value: stats.applied, icon: <CheckCircle className="w-5 h-5" /> },
-            { label: 'Interview', value: stats.interview, icon: <Calendar className="w-5 h-5" /> },
-            { label: 'Offer', value: stats.offer, icon: <CheckCircle className="w-5 h-5 text-green-400" /> },
+            // BUG FIX 4: Was stats.total — the backend key is "totalJobs", not "total".
+            // This caused the Total Jobs stat card to always show undefined.
+            { label: 'Total Jobs',  value: stats.totalJobs,  icon: <Briefcase className="w-5 h-5" /> },
+            { label: 'Applied',     value: stats.applied,    icon: <CheckCircle className="w-5 h-5" /> },
+            { label: 'Interview',   value: stats.interview,  icon: <Calendar className="w-5 h-5" /> },
+            { label: 'Offer',       value: stats.offer,      icon: <CheckCircle className="w-5 h-5 text-green-400" /> },
           ].map((s, i) => (
             <motion.div
               key={i}
@@ -126,7 +142,7 @@ function Dashboard() {
               className="bg-slate-800/50 rounded-2xl p-4 border border-slate-700"
             >
               <div className="text-indigo-400 mb-2">{s.icon}</div>
-              <div className="text-2xl font-bold text-white">{s.value}</div>
+              <div className="text-2xl font-bold text-white">{s.value ?? 0}</div>
               <div className="text-slate-400 text-sm">{s.label}</div>
             </motion.div>
           ))}
@@ -136,26 +152,40 @@ function Dashboard() {
       {/* Jobs List */}
       <h2 className="text-white font-bold text-lg mb-4">Applications</h2>
       <div className="space-y-3">
-        {jobs.map((job, i) => (
-          <motion.div
-            key={job.id}
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: i * 0.05 }}
-            className="bg-slate-800/50 rounded-2xl p-4 border border-slate-700 flex justify-between items-center"
-          >
-            <div className="flex items-center gap-3">
-              {statusIcon(job.status)}
-              <div>
-                <p className="text-white font-medium">{job.companyName}</p>
-                <p className="text-slate-400 text-sm">{job.jobRole}</p>
+        {/* BUG FIX 5: No empty state — when jobs is [] the section was just blank
+            with no feedback. Added a prompt to encourage adding the first job. */}
+        {jobs.length === 0 ? (
+          <div className="text-slate-500 text-sm text-center py-12">
+            No applications yet.{' '}
+            <button
+              onClick={() => navigate('/jobs/new')}
+              className="text-indigo-400 hover:text-indigo-300 underline"
+            >
+              Add your first job
+            </button>
+          </div>
+        ) : (
+          jobs.map((job, i) => (
+            <motion.div
+              key={job.id}
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: i * 0.05 }}
+              className="bg-slate-800/50 rounded-2xl p-4 border border-slate-700 flex justify-between items-center"
+            >
+              <div className="flex items-center gap-3">
+                {statusIcon(job.status)}
+                <div>
+                  <p className="text-white font-medium">{job.companyName}</p>
+                  <p className="text-slate-400 text-sm">{job.jobRole}</p>
+                </div>
               </div>
-            </div>
-            <span className="px-3 py-1 rounded-full text-xs font-medium bg-indigo-500/20 text-indigo-300">
-              {job.status}
-            </span>
-          </motion.div>
-        ))}
+              <span className="px-3 py-1 rounded-full text-xs font-medium bg-indigo-500/20 text-indigo-300">
+                {job.status}
+              </span>
+            </motion.div>
+          ))
+        )}
       </div>
 
       {/* Floating AI Chat Button */}
@@ -206,6 +236,8 @@ function Dashboard() {
                   <div className="bg-slate-800 text-slate-400 px-3 py-2 rounded-xl text-xs">Thinking...</div>
                 </div>
               )}
+              {/* Auto-scroll anchor */}
+              <div ref={chatBottomRef} />
             </div>
 
             {/* Input */}
@@ -213,14 +245,15 @@ function Dashboard() {
               <input
                 value={input}
                 onChange={e => setInput(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleSend()}
+                onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleSend()}
                 placeholder="Ask anything..."
                 className="flex-1 bg-slate-800 text-white text-xs px-3 py-2 rounded-xl outline-none placeholder-slate-500"
               />
               <motion.button
                 whileTap={{ scale: 0.9 }}
                 onClick={handleSend}
-                className="bg-indigo-600 p-2 rounded-xl"
+                disabled={thinking}
+                className="bg-indigo-600 p-2 rounded-xl disabled:opacity-50"
               >
                 <Send className="w-3 h-3 text-white" />
               </motion.button>

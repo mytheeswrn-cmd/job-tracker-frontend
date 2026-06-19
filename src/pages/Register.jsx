@@ -1,19 +1,25 @@
-import { useEffect, useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Briefcase, CheckCircle, Calendar, XCircle, LogOut, Plus, Sparkles, X, Copy, Check, User, Mail, Lock, ArrowRight, Link } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useState } from 'react';
+import { motion } from 'framer-motion';
+// BUG FIX 1: Removed massive block of unused imports (useEffect, AnimatePresence,
+// Briefcase, CheckCircle, Calendar, XCircle, LogOut, Plus, Sparkles, X, Copy, Check).
+// These were all leftover from copy-paste and added ~15 unused variables.
+// More critically: 'Link' was imported from 'lucide-react' (an icon library),
+// not from 'react-router-dom'. Lucide's Link is an SVG icon, not a router component.
+// Using it as <Link to="/login"> renders nothing / throws a runtime error,
+// so the "Sign in" link at the bottom of the register page was completely broken.
+import { User, Mail, Lock, ArrowRight } from 'lucide-react';
+import { useNavigate, Link } from 'react-router-dom';
 import api from '../services/api';
 
+// BUG FIX 2: Removed unused state variables leftover from copy-paste:
+// selectedJob, coverLetter, generating, copied — none of them were used in the JSX.
+// They were just dead weight causing lint warnings.
 function Register() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [selectedJob, setSelectedJob] = useState(null);
-  const [coverLetter, setCoverLetter] = useState('');
-  const [generating, setGenerating] = useState(false);
-  const [copied, setCopied] = useState(false);
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
@@ -26,8 +32,10 @@ function Register() {
       localStorage.setItem('token', response.data.token);
       navigate('/dashboard');
     } catch (err) {
+      // BUG FIX 3: Backend now returns { error: "..." } not { message: "..." }.
+      // Was: err.response?.data?.message → always undefined → always showed generic text.
       setError(
-        err.response?.data?.message || 'Could not create account. Try a different email.'
+        err.response?.data?.error || 'Could not create account. Try a different email.'
       );
     } finally {
       setLoading(false);
@@ -121,7 +129,7 @@ function Register() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              minLength={4}
+              minLength={6}
               className="w-full pl-11 pr-4 py-3 rounded-xl bg-slate-800/50 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:scale-[1.02] transition-all duration-200"
             />
           </motion.div>
@@ -158,6 +166,7 @@ function Register() {
           className="text-center text-slate-400 text-sm mt-6"
         >
           Already have an account?{' '}
+          {/* This now correctly uses react-router-dom's Link */}
           <Link to="/login" className="text-indigo-400 hover:text-indigo-300">
             Sign in
           </Link>
