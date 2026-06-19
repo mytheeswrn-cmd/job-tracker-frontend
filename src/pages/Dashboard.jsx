@@ -104,9 +104,6 @@ function Dashboard() {
           <motion.button
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
-            {/* BUG FIX 3: Was "/job/new" — missing 's'. The route in App.jsx is "/jobs/new".
-                This caused the Add Job button to match the wildcard route and redirect
-                straight back to /login instead of opening the form. */}
             onClick={() => navigate('/jobs/new')}
             className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-medium"
           >
